@@ -1,0 +1,221 @@
+-- QUESTION 1
+-- can you pull overall session and order volume trended by quarter for the life of the business. Most recent quarter incomplete
+
+SELECT
+	YEAR(website_sessions.created_at) AS yr,
+	QUARTER(website_sessions.created_at) AS q,
+    -- created_at,
+	COUNT(DISTINCT website_sessions.website_session_id) AS overall_sessions,
+    COUNT(DISTINCT orders.order_id) AS order_volume
+FROM website_sessions
+	LEFT JOIN orders
+		ON website_sessions.website_session_id = orders.website_session_id
+WHERE website_sessions.created_at < '2015-01-01'
+GROUP BY 1,2
+;
+
+
+-- QUESTION 2
+-- show quarterly figures for session-to-order conversion rate, revenue per order and revenue per session
+
+SELECT
+	YEAR(website_sessions.created_at) AS yr,
+	QUARTER(website_sessions.created_at) AS q,
+    COUNT(DISTINCT orders.order_id)/COUNT(DISTINCT website_sessions.website_session_id) AS session_to_order_conversion_rt,
+    SUM(orders.price_usd)/COUNT(DISTINCT orders.order_id) AS revenue_per_order,
+    SUM(orders.price_usd)/COUNT(DISTINCT website_sessions.website_session_id) AS revenue_per_session
+FROM website_sessions
+	LEFT JOIN orders
+		ON website_sessions.website_session_id = orders.website_session_id
+WHERE website_sessions.created_at < '2015-01-01'
+GROUP BY 1,2
+;
+
+
+-- QUESTION 3
+-- show quarterly view of orders from Gsearch nonbrand, bsearch nonbrand, brand search overall, organic search and direct type-in
+
+SELECT
+	YEAR(website_sessions.created_at) AS yr,
+	QUARTER(website_sessions.created_at) AS q,
+    COUNT(DISTINCT CASE WHEN utm_source = 'gsearch' AND utm_campaign = 'nonbrand' THEN orders.order_id ELSE NULL END) AS gsearch_nonbrand_orders,
+    COUNT(DISTINCT CASE WHEN utm_source = 'bsearch' AND utm_campaign = 'nonbrand' THEN orders.order_id ELSE NULL END) AS bsearch_nonbrand_orders,
+    COUNT(DISTINCT CASE WHEN utm_campaign = 'brand' THEN orders.order_id ELSE NULL END) AS overall_brand_orders,
+    COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NOT NULL THEN orders.order_id ELSE NULL END) AS organic_search_orders, 
+    COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NULL THEN orders.order_id ELSE NULL END) AS direct_type_orders
+FROM website_sessions
+	LEFT JOIN orders
+		ON website_sessions.website_session_id = orders.website_session_id
+WHERE website_sessions.created_at < '2015-01-01'
+GROUP BY 1,2
+;
+
+
+-- QUESTION 4
+-- show overall session-to-order conversion rate for the channels in question 3, by quarter
+
+SELECT
+	YEAR(website_sessions.created_at) AS yr,
+	QUARTER(website_sessions.created_at) AS q,
+    
+    COUNT(DISTINCT CASE WHEN utm_source = 'gsearch' AND utm_campaign = 'nonbrand' THEN orders.order_id ELSE NULL END)
+    /COUNT(DISTINCT CASE WHEN utm_source = 'gsearch' AND utm_campaign = 'nonbrand' THEN website_sessions.website_session_id ELSE NULL END) gsearch_nonbrand_conv_rt,
+    
+    COUNT(DISTINCT CASE WHEN utm_source = 'bsearch' AND utm_campaign = 'nonbrand' THEN orders.order_id ELSE NULL END)
+    /COUNT(DISTINCT CASE WHEN utm_source = 'bsearch' AND utm_campaign = 'nonbrand' THEN website_sessions.website_session_id ELSE NULL END) bsearch_nonbrand_conv_rt,
+    
+    COUNT(DISTINCT CASE WHEN utm_campaign = 'brand' THEN orders.order_id ELSE NULL END)
+    /COUNT(DISTINCT CASE WHEN utm_campaign = 'brand' THEN website_sessions.website_session_id ELSE NULL END) AS brand_conv_rt,
+    
+    COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IN('https://www.gsearch.com','https://www.bsearch.com') THEN orders.order_id ELSE NULL END) -- http_referer IS NOT NULL is better
+    /COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IN('https://www.gsearch.com','https://www.bsearch.com') THEN website_sessions.website_session_id ELSE NULL END) AS organic_conv_rt,  -- http_referer IS NOT NULL is better
+    
+    COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NULL THEN orders.order_id ELSE NULL END)
+    /COUNT(DISTINCT CASE WHEN utm_source IS NULL AND http_referer IS NULL THEN website_sessions.website_session_id ELSE NULL END) AS direct_type_conv_rt
+    
+FROM website_sessions
+	LEFT JOIN orders
+		ON website_sessions.website_session_id = orders.website_session_id
+WHERE website_sessions.created_at < '2015-01-01'
+GROUP BY 1,2
+;
+
+
+-- QUESTION 5
+-- show monthly revenue and margin(profit-cogs) by product, along with total sales and revenue. Note anything you notice about seasonality
+
+SELECT
+	YEAR(order_items.created_at) AS yr,
+	MONTH(order_items.created_at) AS mo,
+	
+    SUM(CASE WHEN order_items.product_id = 1 THEN order_items.price_usd ELSE NULL END) AS mrfuzzy_revenue,
+	-- SUM(CASE WHEN order_items.product_id = 1 THEN order_items.cogs_usd ELSE NULL END) AS product1_cogs,
+    SUM(CASE WHEN order_items.product_id = 1 THEN order_items.price_usd - order_items.cogs_usd ELSE NULL END) AS mrfuzzy_margin,
+	
+    SUM(CASE WHEN order_items.product_id = 2 THEN order_items.price_usd ELSE NULL END) AS lovebear_revenue,
+	-- SUM(CASE WHEN order_items.product_id = 1 THEN order_items.cogs_usd ELSE NULL END) AS product2_cogs,
+    SUM(CASE WHEN order_items.product_id = 2 THEN order_items.price_usd - order_items.cogs_usd ELSE NULL END) AS lovebear_margin,
+    
+    SUM(CASE WHEN order_items.product_id = 3 THEN order_items.price_usd ELSE NULL END) AS sugarpanda_revenue,
+	-- SUM(CASE WHEN order_items.product_id = 3 THEN order_items.cogs_usd ELSE NULL END) AS product3_cogs,
+    SUM(CASE WHEN order_items.product_id = 3 THEN order_items.price_usd - order_items.cogs_usd ELSE NULL END) AS sugarpanda_margin,
+    
+    SUM(CASE WHEN order_items.product_id = 4 THEN order_items.price_usd ELSE NULL END) AS hudsonbear_revenue,
+	-- SUM(CASE WHEN order_items.product_id = 4 THEN order_items.cogs_usd ELSE NULL END) AS product4_cogs,    
+    SUM(CASE WHEN order_items.product_id = 4 THEN order_items.price_usd - order_items.cogs_usd ELSE NULL END) AS hudsonbear_margin,
+    
+    COUNT(DISTINCT order_items.order_id) AS total_sales,
+    SUM(order_items.price_usd) AS revenue
+FROM order_items
+	LEFT JOIN products
+		ON order_items.product_id = products.product_id
+WHERE order_items.created_at < '2015-01-01'
+GROUP BY 1,2
+;
+
+
+-- QUESTION 6
+-- show monthly sessions to /products and click through rate from /product to another page along with a view of conversion to placed orders
+
+CREATE TEMPORARY TABLE session_product_next_pageview_and_orders
+SELECT
+	sessions_in_product.created_at,
+	sessions_in_product.website_session_id,
+    sessions_in_product.website_pageview_id AS product_pageviews,
+    sessions_in_product.pageview_url,
+    MIN(website_pageviews.website_pageview_id) AS next_pageview,
+    website_pageviews.pageview_url AS next_pageview_url,
+	orders.order_id
+FROM
+(
+SELECT
+	website_sessions.created_at,
+	website_sessions.website_session_id,
+    website_pageviews.website_pageview_id,
+    website_pageviews.pageview_url
+FROM website_sessions
+	LEFT JOIN website_pageviews
+		ON website_sessions.website_session_id = website_pageviews.website_session_id
+WHERE website_sessions.created_at < '2015-01-01'
+	AND pageview_url IN('/products')
+ GROUP BY 1,2
+) AS sessions_in_product
+LEFT JOIN website_pageviews
+	ON sessions_in_product.website_session_id = website_pageviews.website_session_id
+    AND website_pageviews.website_pageview_id > sessions_in_product.website_pageview_id
+LEFT JOIN orders
+	ON orders.website_session_id = sessions_in_product.website_session_id
+GROUP BY 1,2
+;
+
+SELECT * FROM session_product_next_pageview_and_orders;
+
+SELECT 
+	YEAR(created_at) AS yr,
+    MONTH(created_at) AS mo,
+    COUNT(DISTINCT CASE WHEN product_pageviews IS NOT NULL THEN website_session_id ELSE NULL END) AS product_page_sessions,
+	COUNT(DISTINCT CASE WHEN next_pageview IS NOT NULL THEN website_session_id ELSE NULL END) AS to_next_page,
+    COUNT(DISTINCT CASE WHEN next_pageview IS NOT NULL THEN website_session_id ELSE NULL END)
+    /COUNT(DISTINCT CASE WHEN product_pageviews IS NOT NULL THEN website_session_id ELSE NULL END) AS product_ctr,
+    COUNT(DISTINCT order_id) AS orders,
+    COUNT(DISTINCT order_id)/COUNT(DISTINCT CASE WHEN product_pageviews IS NOT NULL THEN website_session_id ELSE NULL END) AS product_to_order_conv_rt
+FROM session_product_next_pageview_and_orders
+GROUP BY 1,2
+;
+
+
+-- QUESTION 7
+-- from December 05, 2014 pull product cross-sell data
+
+CREATE TEMPORARY TABLE sales_and_xsells
+SELECT
+	primary_items.order_id,
+	primary_items.primary_product_id,
+    primary_items.is_primary_item AS primary_item,
+    -- order_items.is_primary_item AS xsell_items,
+    order_items.product_id AS xsell_id
+(
+SELECT
+	orders.created_at,
+	orders.order_id,
+	orders.primary_product_id,
+    order_items.is_primary_item
+FROM orders
+	LEFT JOIN order_items
+		ON orders.order_id = order_items.order_id
+WHERE orders.created_at > '2014-12-05'
+) AS primary_items
+	LEFT JOIN order_items
+		ON primary_items.order_id = order_items.order_id
+        AND order_items.is_primary_item = 0 
+WHERE primary_items.created_at > '2014-12-05'
+GROUP BY 1,2
+ORDER BY 3 DESC
+;
+
+
+SELECT * FROM sales_and_xsells;
+
+
+SELECT 
+	CASE 
+		WHEN primary_product_id = 1 THEN 'mrfuzzy'
+        WHEN primary_product_id = 2 THEN 'lovebear'
+        WHEN primary_product_id = 3 THEN 'birthday_panda'
+        WHEN primary_product_id = 4 THEN 'mini_bear'
+		ELSE 'check logic'
+	END AS product,
+	 COUNT(DISTINCT order_id) AS orders,
+	 -- COUNT(DISTINCT CASE WHEN xsell_id IS NOT NULL THEN order_id ELSE NULL END) AS xsell_product,
+     COUNT(CASE WHEN primary_product_id IN(2,3,4) AND xsell_id = 1 THEN order_id ELSE NULL END) AS mrfuzzy_xsell, -- the primary_product_id IN(2,3,4) etc. might be superfluous
+     COUNT(CASE WHEN primary_product_id IN(1,3,4) AND xsell_id = 2 THEN order_id ELSE NULL END) AS lovebear_xsell,
+     COUNT(CASE WHEN primary_product_id IN(1,2,4) AND xsell_id = 3 THEN order_id ELSE NULL END) AS birthday_panda_xsell,
+     COUNT(CASE WHEN primary_product_id IN(1,2,3) AND xsell_id = 4 THEN order_id ELSE NULL END) AS mini_bear_xsell,
+     COUNT(CASE WHEN primary_product_id IN(2,3,4) AND xsell_id = 1 THEN order_id ELSE NULL END)/COUNT(DISTINCT order_id) AS mrfuzzy_xsell_pct,
+	 COUNT(CASE WHEN primary_product_id IN(1,3,4) AND xsell_id = 2 THEN order_id ELSE NULL END)/COUNT(DISTINCT order_id) AS lovebear_xsell_pct,
+     COUNT(CASE WHEN primary_product_id IN(1,2,4) AND xsell_id = 3 THEN order_id ELSE NULL END)/COUNT(DISTINCT order_id) AS birthday_panda__xsell_pct,
+	 COUNT(CASE WHEN primary_product_id IN(1,2,3) AND xsell_id = 4 THEN order_id ELSE NULL END)/COUNT(DISTINCT order_id) AS mini_bear_xsell_pct
+FROM sales_and_xsells
+GROUP BY product
+ORDER BY orders DESC
+;
